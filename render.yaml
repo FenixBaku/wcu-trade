@@ -3,11 +3,11 @@
 # Provisions PostgreSQL + Redis (Key Value) + the API (Docker) + the web (static SPA).
 # Free plans; the API seeds demo data on first deploy (logins: *@wcu.edu / Passw0rd!).
 
-databases:
-  - name: wcu-postgres
-    plan: free
-    databaseName: wcu_trade
-    user: wcu
+# NOTE: Render allows only ONE free-tier PostgreSQL per account. This blueprint therefore
+# does NOT create a database — set DATABASE_URL yourself in the wcu-api service:
+#   • Reuse an existing Render Postgres: paste its "Internal Database URL", OR
+#   • Create a new Postgres (delete an unused free one first if you hit the limit).
+# If you have no other free DB, you can instead re-add a `databases:` block (see git history).
 
 services:
   # ---- Redis (Key Value) ----
@@ -32,9 +32,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
-        fromDatabase:
-          name: wcu-postgres
-          property: connectionString
+        sync: false # paste your Postgres Internal Database URL in the Render dashboard
       - key: REDIS_URL
         fromService:
           type: keyvalue
