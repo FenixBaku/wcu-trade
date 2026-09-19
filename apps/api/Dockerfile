@@ -9,7 +9,8 @@ COPY package.json package-lock.json* ./
 COPY packages/shared/package.json packages/shared/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
-RUN npm install --workspaces --include-workspace-root
+# Only install what the API image needs (api + shared + root) — skips the heavy web deps.
+RUN npm install --include-workspace-root --workspace @wcu/api --workspace @wcu/shared
 
 # ---- build ----
 FROM deps AS build
