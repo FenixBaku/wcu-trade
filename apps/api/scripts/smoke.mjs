@@ -80,19 +80,21 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await sleep(1000);
   }
 
-  // 8. Verify realized P&L in ledger + trade history
-  const trades = await j('GET', '/trades');
-  const ledger = await j('GET', '/transactions');
-  summary = await j('GET', '/portfolio/summary');
+  // 8. Close (auto via trigger, or manual fallback) THEN read final state
   if (closed) {
     ok('Position auto-closed by the TP trigger engine');
-    const realized = ledger.find((l) => l.type === 'REALIZED_PNL');
-    if (realized) ok(`Ledger REALIZED_PNL entry: ${realized.amount}`);
   } else {
     info('TP not reached within the wait window (price did not tick up); closing manually to finish the flow');
     await j('POST', `/positions/${pos.id}/close`);
     ok('Position closed manually');
   }
+
+  // Verify realized P&L in ledger + trade history (read AFTER the close)
+  const trades = await j('GET', '/trades');
+  const ledger = await j('GET', '/transactions');
+  summary = await j('GET', '/portfolio/summary');
+  const realized = ledger.find((l) => l.type === 'REALIZED_PNL');
+  if (realized) ok(`Ledger REALIZED_PNL entry: ${realized.amount}`);
   info(`Trades recorded: ${trades.length} | ledger entries: ${ledger.length}`);
   info(`Final equity: $${summary.equity} | realized P&L $${summary.realizedPnl}`);
 
