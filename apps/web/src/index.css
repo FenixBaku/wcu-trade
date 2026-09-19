@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: #0b0e11;
+  color: #eaecef;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #232a34;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2f3947;
+}
+
+@layer components {
+  .num {
+    @apply font-mono tabular-nums;
+  }
+  .panel {
+    @apply bg-panel border border-border rounded-md;
+  }
+  .btn {
+    @apply px-3 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .btn-wcu {
+    @apply btn bg-wcu hover:bg-wcu-bright text-white;
+  }
+  .btn-ghost {
+    @apply btn text-txt-muted hover:text-txt hover:bg-elevated;
+  }
+  .input {
+    @apply w-full bg-base border border-border rounded px-2.5 py-1.5 text-sm text-txt focus:border-wcu focus:outline-none num;
+  }
+  .tab {
+    @apply px-3 py-1.5 text-sm text-txt-muted hover:text-txt cursor-pointer border-b-2 border-transparent;
+  }
+  .tab-active {
+    @apply text-txt border-wcu;
+  }
+}

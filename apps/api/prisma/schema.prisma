@@ -1,0 +1,521 @@
+// WCU TRADE — Prisma schema. Money & quantities use Decimal(38,18).
+// Financial history is immutable; corrections are new ledger rows.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------------------------------------------
+// Enums
+// ----------------------------------------------------------------------------
+enum RoleName {
+  SUPER_ADMIN
+  UNIVERSITY_ADMIN
+  INSTRUCTOR
+  STUDENT
+  OBSERVER
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DISABLED
+}
+
+enum AssetClass {
+  CRYPTO
+  FOREX
+  METAL
+  STOCK
+  INDEX
+  COMMODITY
+  ETF
+}
+
+enum AccountStatus {
+  ACTIVE
+  FROZEN
+  SUSPENDED
+  ARCHIVED
+}
+
+enum AccountKind {
+  SIM
+  BROKER // reserved for Phase 2; never used in Phase 1
+}
+
+enum LedgerType {
+  INITIAL_DEPOSIT
+  TRADE_BUY
+  TRADE_SELL
+  COMMISSION
+  REALIZED_PNL
+  MARGIN_RESERVE
+  MARGIN_RELEASE
+  ADMIN_ADJUSTMENT
+  ACCOUNT_RESET
+}
+
+enum OrderSide {
+  BUY
+  SELL
+}
+
+enum PositionSide {
+  LONG
+  SHORT
+}
+
+enum OrderType {
+  MARKET
+  LIMIT
+  STOP
+  STOP_LIMIT
+  TRAILING_STOP
+  OCO
+}
+
+enum OrderStatus {
+  NEW
+  OPEN
+  PARTIALLY_FILLED
+  FILLED
+  CANCELLED
+  REJECTED
+  EXPIRED
+  TRIGGERED
+}
+
+enum MarginMode {
+  CROSS
+  ISOLATED
+}
+
+enum NotificationType {
+  ORDER_FILLED
+  LIMIT_FILLED
+  STOP_LOSS_TRIGGERED
+  TAKE_PROFIT_TRIGGERED
+  MARGIN_WARNING
+  POSITION_LIQUIDATED
+  COMPETITION_STARTED
+  COMPETITION_FINISHED
+  ASSIGNMENT_CREATED
+  MARKET_DATA_RECONNECTED
+}
+
+// ----------------------------------------------------------------------------
+// Identity & RBAC
+// ----------------------------------------------------------------------------
+model User {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  passwordHash String
+  fullName     String
+  avatarUrl    String?
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  roles           UserRole[]
+  accounts        VirtualAccount[]
+  watchlists      Watchlist[]
+  sessions        AuthSession[]
+  notifications   Notification[]
+  instructorClasses Class[]         @relation("InstructorClasses")
+  classMemberships  ClassStudent[]
+  auditLogs       AuditLog[]
+}
+
+model Role {
+  id    Int        @id @default(autoincrement())
+  name  RoleName   @unique
+  users UserRole[]
+}
+
+model UserRole {
+  userId String
+  roleId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+model AuthSession {
+  id               String   @id @default(uuid())
+  userId           String
+  refreshTokenHash String
+  userAgent        String?
+  ip               String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime @default(now())
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ----------------------------------------------------------------------------
+// Academics
+// ----------------------------------------------------------------------------
+model Faculty {
+  id          String       @id @default(uuid())
+  name        String
+  departments Department[]
+}
+
+model Department {
+  id        String  @id @default(uuid())
+  name      String
+  facultyId String
+  faculty   Faculty @relation(fields: [facultyId], references: [id])
+  classes   Class[]
+}
+
+model Class {
+  id             String   @id @default(uuid())
+  name           String
+  code           String   @unique
+  departmentId   String?
+  instructorId   String
+  // trading configuration for the class
+  startingBalance Decimal @default(100000) @db.Decimal(38, 18)
+  maxLeverage    Int      @default(10)
+  marginEnabled  Boolean  @default(true)
+  shortEnabled   Boolean  @default(true)
+  makerFeeBps    Int      @default(10)
+  takerFeeBps    Int      @default(10)
+  maxCryptoPct   Decimal  @default(100) @db.Decimal(38, 18)
+  confirmOrders  Boolean  @default(true)
+  startDate      DateTime?
+  endDate        DateTime?
+  createdAt      DateTime @default(now())
+
+  department  Department?     @relation(fields: [departmentId], references: [id])
+  instructor  User            @relation("InstructorClasses", fields: [instructorId], references: [id])
+  students    ClassStudent[]
+  sessions    SimulationSession[]
+}
+
+model ClassStudent {
+  classId String
+  userId  String
+  addedAt DateTime @default(now())
+  class   Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([classId, userId])
+}
+
+model SimulationSession {
+  id              String   @id @default(uuid())
+  classId         String
+  name            String
+  startingBalance Decimal  @default(100000) @db.Decimal(38, 18)
+  startDate       DateTime?
+  endDate         DateTime?
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  class           Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  accounts        VirtualAccount[]
+}
+
+// ----------------------------------------------------------------------------
+// Assets / symbols / providers
+// ----------------------------------------------------------------------------
+model Asset {
+  id             String     @id @default(uuid())
+  symbol         String     @unique // internal e.g. BTC-USDT
+  base           String
+  quote          String
+  name           String
+  assetClass     AssetClass
+  pricePrecision Int        @default(2)
+  qtyPrecision   Int        @default(6)
+  active         Boolean    @default(true)
+  marketHours    String     @default("24/7") // 24/7 | equity | forex
+  sortOrder      Int        @default(0)
+
+  providerSymbols ProviderSymbol[]
+  orders          Order[]
+  trades          Trade[]
+  positions       Position[]
+  watchlistItems  WatchlistItem[]
+}
+
+model MarketProvider {
+  id             String  @id @default(uuid())
+  name           String  @unique // binance | twelvedata | polygon
+  enabled        Boolean @default(true)
+  // Credentials, if any, are stored encrypted — never plaintext.
+  encryptedCreds String?
+  providerSymbols ProviderSymbol[]
+}
+
+model ProviderSymbol {
+  id             String  @id @default(uuid())
+  assetId        String
+  providerId     String
+  providerSymbol String // e.g. BTCUSDT
+  asset          Asset          @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  provider       MarketProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, assetId])
+}
+
+model MarketPriceSnapshot {
+  id        String   @id @default(uuid())
+  symbol    String
+  price     Decimal  @db.Decimal(38, 18)
+  bid       Decimal? @db.Decimal(38, 18)
+  ask       Decimal? @db.Decimal(38, 18)
+  ts        DateTime @default(now())
+
+  @@index([symbol, ts])
+}
+
+// ----------------------------------------------------------------------------
+// Virtual accounts & ledger
+// ----------------------------------------------------------------------------
+model VirtualAccount {
+  id              String        @id @default(uuid())
+  userId          String
+  sessionId       String?
+  kind            AccountKind   @default(SIM)
+  currency        String        @default("USD")
+  cashBalance     Decimal       @default(0) @db.Decimal(38, 18)
+  realizedPnl     Decimal       @default(0) @db.Decimal(38, 18)
+  startingBalance Decimal       @default(100000) @db.Decimal(38, 18)
+  status          AccountStatus @default(ACTIVE)
+  defaultLeverage Int           @default(1)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session   SimulationSession? @relation(fields: [sessionId], references: [id])
+  ledger    LedgerEntry[]
+  orders    Order[]
+  trades    Trade[]
+  positions Position[]
+  snapshots PortfolioSnapshot[]
+
+  @@index([userId])
+}
+
+model LedgerEntry {
+  id           String     @id @default(uuid())
+  accountId    String
+  type         LedgerType
+  amount       Decimal    @db.Decimal(38, 18) // signed
+  balanceAfter Decimal    @db.Decimal(38, 18)
+  refOrderId   String?
+  refTradeId   String?
+  memo         String?
+  createdAt    DateTime   @default(now())
+  account      VirtualAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, createdAt])
+}
+
+// ----------------------------------------------------------------------------
+// Orders / trades / positions
+// ----------------------------------------------------------------------------
+model Order {
+  id               String       @id @default(uuid())
+  accountId        String
+  assetId          String
+  side             OrderSide
+  positionSide     PositionSide @default(LONG)
+  type             OrderType
+  status           OrderStatus  @default(NEW)
+  quantity         Decimal      @db.Decimal(38, 18)
+  requestedPrice   Decimal?     @db.Decimal(38, 18)
+  limitPrice       Decimal?     @db.Decimal(38, 18)
+  stopPrice        Decimal?     @db.Decimal(38, 18)
+  takeProfitPrice  Decimal?     @db.Decimal(38, 18)
+  stopLossPrice    Decimal?     @db.Decimal(38, 18)
+  trailingDelta    Decimal?     @db.Decimal(38, 18)
+  trailingAnchor   Decimal?     @db.Decimal(38, 18) // best price seen, for trailing stop
+  filledQuantity   Decimal      @default(0) @db.Decimal(38, 18)
+  averageFillPrice Decimal?     @db.Decimal(38, 18)
+  fee              Decimal      @default(0) @db.Decimal(38, 18)
+  slippage         Decimal      @default(0) @db.Decimal(38, 18)
+  leverage         Int          @default(1)
+  marginMode       MarginMode   @default(ISOLATED)
+  reduceOnly       Boolean      @default(false)
+  clientOrderId    String?      @unique // idempotency
+  rejectReason     String?
+  createdAt        DateTime     @default(now())
+  triggeredAt      DateTime?
+  filledAt         DateTime?
+  cancelledAt      DateTime?
+
+  account VirtualAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  asset   Asset          @relation(fields: [assetId], references: [id])
+  events  OrderEvent[]
+  trades  Trade[]
+
+  @@index([accountId, status])
+}
+
+model OrderEvent {
+  id        String      @id @default(uuid())
+  orderId   String
+  status    OrderStatus
+  note      String?
+  createdAt DateTime    @default(now())
+  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+model Trade {
+  id                String    @id @default(uuid())
+  orderId           String
+  accountId         String
+  assetId           String
+  side              OrderSide
+  quantity          Decimal   @db.Decimal(38, 18)
+  marketPrice       Decimal   @db.Decimal(38, 18) // reference price at execution
+  fillPrice         Decimal   @db.Decimal(38, 18)
+  commission        Decimal   @db.Decimal(38, 18)
+  slippage          Decimal   @db.Decimal(38, 18)
+  realizedPnl       Decimal   @default(0) @db.Decimal(38, 18)
+  providerTimestamp DateTime?
+  executedAt        DateTime  @default(now())
+
+  order   Order          @relation(fields: [orderId], references: [id])
+  account VirtualAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  asset   Asset          @relation(fields: [assetId], references: [id])
+
+  @@index([accountId, executedAt])
+}
+
+model Position {
+  id               String       @id @default(uuid())
+  accountId        String
+  assetId          String
+  side             PositionSide
+  quantity         Decimal      @db.Decimal(38, 18)
+  avgEntryPrice    Decimal      @db.Decimal(38, 18)
+  usedMargin       Decimal      @default(0) @db.Decimal(38, 18)
+  leverage         Int          @default(1)
+  marginMode       MarginMode   @default(ISOLATED)
+  liquidationPrice Decimal?     @db.Decimal(38, 18)
+  realizedPnl      Decimal      @default(0) @db.Decimal(38, 18)
+  takeProfitPrice  Decimal?     @db.Decimal(38, 18)
+  stopLossPrice    Decimal?     @db.Decimal(38, 18)
+  openedAt         DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  closedAt         DateTime?
+
+  account VirtualAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  asset   Asset          @relation(fields: [assetId], references: [id])
+
+  @@index([accountId, closedAt])
+}
+
+model PortfolioSnapshot {
+  id            String   @id @default(uuid())
+  accountId     String
+  equity        Decimal  @db.Decimal(38, 18)
+  cash          Decimal  @db.Decimal(38, 18)
+  unrealizedPnl Decimal  @db.Decimal(38, 18)
+  realizedPnl   Decimal  @db.Decimal(38, 18)
+  usedMargin    Decimal  @db.Decimal(38, 18)
+  ts            DateTime @default(now())
+  account       VirtualAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, ts])
+}
+
+// ----------------------------------------------------------------------------
+// Watchlists / notifications / audit
+// ----------------------------------------------------------------------------
+model Watchlist {
+  id     String          @id @default(uuid())
+  userId String
+  name   String          @default("Default")
+  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items  WatchlistItem[]
+}
+
+model WatchlistItem {
+  id          String    @id @default(uuid())
+  watchlistId String
+  assetId     String
+  sortOrder   Int       @default(0)
+  watchlist   Watchlist @relation(fields: [watchlistId], references: [id], onDelete: Cascade)
+  asset       Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([watchlistId, assetId])
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  payload   Json?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  actorId   String?
+  action    String
+  target    String?
+  oldData   Json?
+  newData   Json?
+  ip        String?
+  requestId String?
+  createdAt DateTime @default(now())
+  actor     User?    @relation(fields: [actorId], references: [id])
+
+  @@index([action, createdAt])
+}
+
+// ----------------------------------------------------------------------------
+// Competitions & assignments (academic runtime)
+// ----------------------------------------------------------------------------
+model Competition {
+  id              String   @id @default(uuid())
+  name            String
+  startingBalance Decimal  @default(100000) @db.Decimal(38, 18)
+  maxLeverage     Int      @default(5)
+  startDate       DateTime?
+  endDate         DateTime?
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  members         CompetitionMember[]
+}
+
+model CompetitionMember {
+  competitionId String
+  userId        String
+  joinedAt      DateTime @default(now())
+  competition   Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+
+  @@id([competitionId, userId])
+}
+
+model Assignment {
+  id          String   @id @default(uuid())
+  title       String
+  description String
+  rules       Json // { minAssets, maxCryptoPct, maxDrawdownPct, durationDays }
+  startDate   DateTime?
+  endDate     DateTime?
+  createdAt   DateTime @default(now())
+}

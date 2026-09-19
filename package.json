@@ -1,0 +1,27 @@
+{
+  "name": "wcu-trade",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WCU TRADE — Financial Markets Simulation Platform (Western Caspian University)",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,magenta \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "npm run dev --workspace @wcu/api",
+    "dev:web": "npm run dev --workspace @wcu/web",
+    "build": "npm run build --workspace @wcu/shared && npm run build --workspace @wcu/api && npm run build --workspace @wcu/web",
+    "build:shared": "npm run build --workspace @wcu/shared",
+    "prisma:generate": "npm run prisma:generate --workspace @wcu/api",
+    "prisma:migrate": "npm run prisma:migrate --workspace @wcu/api",
+    "db:seed": "npm run seed --workspace @wcu/api",
+    "test": "npm run test --workspace @wcu/api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
