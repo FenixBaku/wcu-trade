@@ -11,6 +11,7 @@
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:push": "prisma db push",
     "seed": "ts-node prisma/seed.ts",
+    "smoke": "node scripts/smoke.mjs",
     "test": "jest"
   },
   "dependencies": {

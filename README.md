@@ -56,7 +56,7 @@ npm install
 docker compose up -d postgres redis
 npm run build:shared
 npm run prisma:generate
-npm run prisma:migrate:dev --workspace @wcu/api   # creates the schema
+npm run prisma:migrate            # applies the baseline migration (creates the schema)
 npm run db:seed
 npm run dev            # starts API (http://localhost:4000) + web (http://localhost:5173)
 ```
