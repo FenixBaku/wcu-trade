@@ -20,8 +20,9 @@
     "strictPropertyInitialization": false,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "moduleResolution": "node"
+    "moduleResolution": "node",
+    "rootDir": "./src"
   },
-  "include": ["src/**/*.ts", "prisma/**/*.ts"],
+  "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }

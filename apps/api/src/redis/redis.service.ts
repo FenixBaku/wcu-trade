@@ -15,6 +15,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   private _sub!: Redis;
   private _client!: Redis;
   available = false;
+  private _warned = false;
 
   constructor(private readonly config: ConfigService) {}
 
@@ -27,9 +28,17 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     for (const [name, c] of [['client', this._client], ['pub', this._pub], ['sub', this._sub]] as const) {
       c.on('ready', () => {
         this.available = true;
+        this._warned = false;
         this.logger.log(`Redis ${name} ready`);
       });
-      c.on('error', (e) => this.logger.warn(`Redis ${name} error: ${e.message}`));
+      // Warn once when Redis becomes unreachable, then stay quiet until it recovers,
+      // so a Redis-less dev run does not spam the log.
+      c.on('error', (e) => {
+        if (!this._warned) {
+          this._warned = true;
+          this.logger.warn(`Redis unavailable — running in degraded mode (fan-out/cache off): ${e.message || 'connection refused'}`);
+        }
+      });
       c.on('end', () => (this.available = false));
     }
   }
