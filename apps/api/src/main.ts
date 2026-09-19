@@ -13,7 +13,10 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
   app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false }));
-  app.enableCors({ origin: config.get<string[]>('corsOrigins'), credentials: true });
+  // Bearer-token auth (no cookies), so reflecting origins is safe. Set CORS_ORIGINS=* to
+  // allow any origin (useful for split hosting on Render), else use the allowlist.
+  const origins = config.get<string[]>('corsOrigins') ?? [];
+  app.enableCors({ origin: origins.includes('*') ? true : origins, credentials: true });
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false }),
   );

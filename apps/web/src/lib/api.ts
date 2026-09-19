@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { useAuth } from '../store/auth';
+import { apiBase } from './env';
 
-export const api = axios.create({ baseURL: '/api' });
+export const api = axios.create({ baseURL: `${apiBase}/api` });
 
 api.interceptors.request.use((cfg) => {
   const token = useAuth.getState().accessToken;
@@ -15,7 +16,7 @@ async function doRefresh(): Promise<string | null> {
   const { refreshToken, setTokens, logout } = useAuth.getState();
   if (!refreshToken) return null;
   try {
-    const res = await axios.post('/api/auth/refresh', { refreshToken });
+    const res = await axios.post(`${apiBase}/api/auth/refresh`, { refreshToken });
     setTokens({ accessToken: res.data.accessToken, refreshToken: res.data.refreshToken });
     return res.data.accessToken;
   } catch {

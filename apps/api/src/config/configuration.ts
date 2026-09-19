@@ -35,7 +35,8 @@ const bool = (v: string | undefined, def = false) =>
 
 export default (): AppConfig => ({
   env: process.env.NODE_ENV ?? 'development',
-  apiPort: parseInt(process.env.API_PORT ?? '4000', 10),
+  // Render/Heroku inject PORT; fall back to API_PORT then 4000 for local dev.
+  apiPort: parseInt(process.env.PORT ?? process.env.API_PORT ?? '4000', 10),
   jwt: {
     accessSecret: process.env.JWT_ACCESS_SECRET ?? 'dev_access_secret',
     refreshSecret: process.env.JWT_REFRESH_SECRET ?? 'dev_refresh_secret',

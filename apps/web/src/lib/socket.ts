@@ -3,6 +3,7 @@ import { useAuth } from '../store/auth';
 import { useMarket } from '../store/market';
 import { usePortfolio } from '../store/portfolio';
 import { WS_TOPICS } from '@wcu/shared';
+import { apiBase } from './env';
 
 let socket: Socket | null = null;
 const subscribed = new Set<string>();
@@ -21,7 +22,7 @@ export function connectSocket() {
   const userId = useAuth.getState().user?.id;
   if (!token || socket) return;
 
-  socket = io('/', { auth: { token }, transports: ['websocket'], reconnection: true });
+  socket = io(apiBase || '/', { auth: { token }, transports: ['websocket'], reconnection: true });
 
   socket.on('market.status', (h) => useMarket.getState().setHealth(h));
 
