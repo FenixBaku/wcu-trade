@@ -50,8 +50,10 @@ export default (): AppConfig => ({
   },
   marketData: {
     provider: process.env.MARKET_DATA_PROVIDER ?? 'binance',
-    binanceWsUrl: process.env.BINANCE_WS_URL ?? 'wss://stream.binance.com:9443',
-    binanceRestUrl: process.env.BINANCE_REST_URL ?? 'https://api.binance.com',
+    // Public market-data endpoints (data.binance.vision). Unlike api.binance.com these are
+    // not geo-blocked (api.binance.com returns HTTP 451 from US IPs, e.g. cloud regions).
+    binanceWsUrl: process.env.BINANCE_WS_URL ?? 'wss://data-stream.binance.vision',
+    binanceRestUrl: process.env.BINANCE_REST_URL ?? 'https://data-api.binance.vision',
     quoteStaleThresholdMs: parseInt(process.env.QUOTE_STALE_THRESHOLD_MS ?? '5000', 10),
   },
   sim: {
