@@ -51,7 +51,7 @@ services:
     ports:
       - '4000:4000'
     # On boot: apply migrations, seed (idempotent), then start.
-    command: sh -c "npx prisma migrate deploy && npx ts-node prisma/seed.ts || true; node dist/main.js"
+    command: sh -c "npx prisma migrate deploy && (node dist/seed.js || true) && node dist/main.js"
 
   web:
     build:

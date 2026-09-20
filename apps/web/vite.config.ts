@@ -15,6 +15,7 @@ export default defineConfig({
     },
   },
   server: {
+    allowedHosts: true,
     port: 5173,
     proxy: {
       '/api': { target: 'http://localhost:4000', changeOrigin: true },
@@ -22,3 +23,4 @@ export default defineConfig({
     },
   },
 });
+

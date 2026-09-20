@@ -1,38 +1,28 @@
-# WCU TRADE — Render Blueprint
-# Deploy: Render Dashboard → New → Blueprint → connect this repo → Apply.
-# Provisions PostgreSQL + Redis (Key Value) + the API (Docker) + the web (static SPA).
-# Free plans; the API seeds demo data on first deploy (logins: *@wcu.edu / Passw0rd!).
-
-# NOTE: Render allows only ONE free-tier PostgreSQL per account. This blueprint therefore
-# does NOT create a database — set DATABASE_URL yourself in the wcu-api service:
-#   • Reuse an existing Render Postgres: paste its "Internal Database URL", OR
-#   • Create a new Postgres (delete an unused free one first if you hit the limit).
-# If you have no other free DB, you can instead re-add a `databases:` block (see git history).
+# WCU TRADE — Render Blueprint (single service, no Docker)
+# The API also serves the built React app, so ONE web service hosts the whole platform.
+# Deploy: Render → New → Blueprint → connect this repo → Apply, then set DATABASE_URL.
+# Render allows only ONE free Postgres/account, so this blueprint does NOT create the DB —
+# set DATABASE_URL yourself (reuse an existing Render Postgres, ideally with ?schema=wcu).
 
 services:
-  # ---- Redis (Key Value) ----
   - type: keyvalue
     name: wcu-redis
     plan: free
-    ipAllowList: [] # internal access only
+    ipAllowList: []
     maxmemoryPolicy: noeviction
 
-  # ---- API (NestJS, Docker) ----
   - type: web
-    name: wcu-api
-    runtime: docker
+    name: wcu-trade
+    runtime: node
     plan: free
-    dockerfilePath: ./apps/api/Dockerfile
-    dockerContext: .
-    # Apply migrations + (idempotent) seed, then start.
-    dockerCommand: sh -c "npx prisma migrate deploy && npx ts-node prisma/seed.ts || true; node dist/main.js"
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm start
     healthCheckPath: /api/health
-    autoDeployTrigger: commit
     envVars:
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
-        sync: false # paste your Postgres Internal Database URL in the Render dashboard
+        sync: false # paste your Postgres Internal URL (append ?schema=wcu to isolate tables)
       - key: REDIS_URL
         fromService:
           type: keyvalue
@@ -44,22 +34,3 @@ services:
         generateValue: true
       - key: MARKET_DATA_PROVIDER
         value: binance
-      - key: CORS_ORIGINS
-        value: "*" # Bearer-token auth (no cookies); reflecting origins is safe here
-
-  # ---- Web (React SPA, static) ----
-  - type: web
-    name: wcu-web
-    runtime: static
-    buildCommand: npm install && npm run build:shared && npm run build --workspace @wcu/web
-    staticPublishPath: ./apps/web/dist
-    envVars:
-      - key: VITE_API_URL
-        fromService:
-          type: web
-          name: wcu-api
-          property: host # bare host; the web prefixes https:// (see src/lib/env.ts)
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
